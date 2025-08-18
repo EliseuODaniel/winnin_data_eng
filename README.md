@@ -18,6 +18,7 @@ Os notebooks na pasta `/notebooks` foram desenvolvidos para serem executados no 
 
 ### Ordem de Execução
 
+
 Os notebooks devem ser executados na seguinte ordem:
 
 1.  `1 - create_table_creators_scrape_wiki.py`
