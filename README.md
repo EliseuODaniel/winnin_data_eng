@@ -8,7 +8,7 @@ Este repositório contém a minha solução para o desafio técnico de Engenhari
 
 O documento PDF com a descrição original e completa do desafio pode ser acessado no link abaixo:
 
-  - **[Clique aqui para ver o Enunciado do Desafio](https://www.google.com/search?q=./challenge_brief/desafio-winnin-dataeng.pdf)**
+  - **[Clique aqui para ver o Enunciado do Desafio](./challenge_brief/desafio-winnin-dataeng.pdf)**
 
 -----
 
@@ -46,7 +46,7 @@ Os notebooks devem ser executados na seguinte ordem:
 
 A proposta de arquitetura para um pipeline de dados contínuo e escalável está detalhada no seguinte documento:
 
-  - **[Clique aqui para ver a Proposta de Arquitetura](https://www.google.com/search?q=./architecture/architecture.md)**
+  - **[Clique aqui para ver a Proposta de Arquitetura](./architecture/architecture.md)**
 
 O documento aborda os seguintes tópicos solicitados no desafio:
 
