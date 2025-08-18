@@ -21,10 +21,10 @@ Os notebooks na pasta `/notebooks` foram desenvolvidos para serem executados no 
 
 Os notebooks devem ser executados na seguinte ordem:
 
-1.  `1 - create_table_creators_scrape_wiki.py`
-2.  `2 - create_table_posts_creator.py`
-3.  `3 - create_table_user_yt_from_wikipedia_api.py`
-4.  `4 - analyze_creators.py`
+1.  `1 - create_table_creators_scrape_wiki.ipynb`
+2.  `2 - create_table_posts_creator.ipynb`
+3.  `3 - create_table_user_yt_from_wikipedia_api.ipynb`
+4.  `4 - analyze_creators.ipynb`
 
 ### Pré-requisitos para Execução
 
