@@ -25,6 +25,8 @@ O documento PDF com a descrição original e completa do desafio pode ser acessa
 
 Os notebooks na pasta `/notebooks` foram desenvolvidos para serem executados no Databricks Community Edition e resolvem os exercícios práticos propostos.
 
+Embora não fosse um requisito explícito da parte 1, a solução foi desenvolvida aplicando um conjunto de boas práticas de engenharia de dados. O objetivo foi demonstrar não apenas a resolução do problema, mas também a construção de um código robusto, escalável e preparado para um ambiente de produção, refletindo decisões de engenharia em aspectos como resiliência, desempenho e manutenibilidade.
+
 ### Ordem de Execução
 
 Os notebooks devem ser executados na seguinte ordem:
