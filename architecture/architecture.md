@@ -5,7 +5,7 @@
 
 #### **Resumo Executivo e Visão Estratégica**
 
-Este documento descreve a arquitetura de uma plataforma de dados  projetada para transformar dados brutos de criadores de conteúdo em um ativo estratégico para a Winnin. A solução, baseada na arquitetura Lakehouse Medallion, busca estabelecer um fundamento governado, com ótimo custo-benefício e com potencial de evolução para iniciativas de IA e BI. O foco estratégico reside em diminuir riscos de dependência tecnológica, garantir a confiabilidade dos dados através de contratos (SLAs/SLOs) e gerenciar os custos operacionais (CLOs).
+Este documento descreve a arquitetura de uma plataforma de dados projetada para transformar dados brutos de criadores de conteúdo em um ativo estratégico. A solução, baseada na arquitetura Lakehouse Medallion, busca estabelecer um fundamento governado, com ótimo custo-benefício e com potencial de evolução para iniciativas de IA e BI. O foco estratégico reside em diminuir riscos de dependência tecnológica, garantir a confiabilidade dos dados através de contratos (SLAs/SLOs) e gerenciar os custos operacionais (CLOs).
 
 #### **Princípios de Design**
 
@@ -23,10 +23,6 @@ A escolha do orquestrador é uma decisão que impacta a flexibilidade e a manute
   * **Recomendação Principal: Apache Airflow**
 
       * **Justificativa Estratégica**: A principal vantagem do Airflow é ser **agnóstico à plataforma de execução**. Assim, a lógica de negócio e as dependências do pipeline (as DAGs) permanecem desacopladas da infraestrutura abaixo (Databricks). Isso garante que uma migração de plataforma seja de menor impacto, alterando-se apenas os operadores de tarefas.
-
-  * **Alternativa Tática: Databricks Workflows**
-
-      * **Justificativa Tática**: Caso a estratégia de longo prazo seja consolidar a operação exclusivamente no ecossistema Databricks. Nesse caso o Workflows se torna uma escolha de menor atrito operacional. Sua integração nativa com o Unity Catalog, Notebooks e Repos simplifica o desenvolvimento e manutenção.
 
 
 #### **2. Modelagem de Dados: Da Integridade à Performance**
@@ -129,7 +125,7 @@ Durante o desafio (dev), as tabelas foram materializadas no schema `default`. Em
 | **`posts_creator`** | (Chave Composta)¹   | `yt_user`                | **1 criador → N posts**. Contém todos os dados dos posts. |
 
 
-¹A tabela `posts_creator` não possui uma chave primária simples. Conforme a lógica de deduplicação no notebook `2`, a unicidade de um post é garantida pela combinação de (`creator_id`, `title`, `published_at_ts`).
+¹A tabela `posts_creator` não possui uma chave primária simples. Conforme a lógica de deduplicação no notebook `2`, a unicidade de um post é garantida pela combinação de (`creator_id`, `title`, `published_at`).
 
 
 **Diagrama Entidade-Relacionamento (ER)** da estrutura normalizada da camada Silver:
@@ -165,24 +161,6 @@ erDiagram
   %% conforme lógica de deduplicação no notebook 2.
 ```
 
-###### **Dicionário de dados da camada Silver**
-
-- **`silver.users_yt`**
-    - `user_id` (PK, natural): Identificador do canal/usuário no YouTube, chave para joins.
-    - `wiki_page` (UK): Nome da página na Wikipedia de onde o `user_id` foi extraído.
-        
-- **`silver.posts_creator`**
-    - `creator_id`: ID original do post vindo do arquivo fonte.
-    - `yt_user` (FK → users_yt): Identificador do canal associado ao post.
-    - `title`: Título do vídeo.
-    - `views`, `likes`: Métricas de engajamento do post.
-    - `tags`: Lista (Array) de tags associadas ao vídeo.
-    - `published_at_ts`: Timestamp normalizado da data de publicação.
-    - `published_month`: Data truncada para o primeiro dia do mês da publicação, usada para agregações.
-
-- **`silver.users_yt_errors`**
-	- `wiki_page`: Nome da página na Wikipedia que foi processada sem sucesso.
-	- `error`: Motivo da falha (ex: 'user_id_not_found', 'empty_page').
 
 ##### Padronização Temporal (UTC)
 
@@ -269,42 +247,6 @@ erDiagram
 
 
 
-###### **Dicionário de dados da Camada Gold**
-
-- **`dim_creator`** (`creator_sk` PK, `user_id` NK, `wiki_page`)
-    - `creator_sk`: Chave substituta única para cada criador.
-    - `user_id`: Chave de negócio (natural key) vinda da `silver.users_yt`.
-    - `wiki_page`: Página da Wikipedia associada.
-        
-- **`dim_post`** (`post_sk` PK, `source_post_id` NK, `title`)
-    - `post_sk`: Chave substituta única para cada post.
-    - `source_post_id`: Chave de negócio (`creator_id` do arquivo original).
-    - `title`: Título do post.
-        
-- **`dim_date`** (`date_sk` PK, `full_date`, `year`, `month`, `year_month_name`, `dow`, `is_weekend`, `iso_year`, `iso_week`, `tz`)
-	- `date_sk`: **inteiro derivado de UTC no formato `YYYYMMDD`** (ex.: 20240415).
-	- `full_date`: **DATE (UTC)** correspondente ao `date_sk`.
-	- `year`, `month`: Componentes numéricos da data.
-	- `year_month_name`: Formato para exibição (ex.: `2024-Abril`).
-	- `dow`: Dia da semana **1–7 (ISO 8601, 1=segunda, 7=domingo)**.
-	- `is_weekend`: Indicador de fim de semana (**TRUE** se `dow` ∈ {6,7}).
-	- `iso_year`, `iso_week`: Ano/Semana ISO (atenção a semanas que “viram” de ano).
-	- `tz`: Fuso de referência (**sempre `UTC` na base**; fusos locais podem ser tratados em views).
-	        
-- **`dim_tag`** (`tag_sk` PK, `tag_name`)
-    - `tag_sk`: Chave substituta única para cada tag.
-    - `tag_name`: O texto da tag.
-        
-- **`fct_post_publications`** (`creator_sk` FK, `post_sk` FK, `published_date_sk` FK, `views`, `likes`, `post_count`)
-    
-    - `creator_sk`, `post_sk`, `published_date_sk`: Chaves estrangeiras que conectam às dimensões.
-    - `views`, `likes`: Métricas de engajamento do post.
-    - `post_count`: Medida aditiva (sempre 1) para facilitar a contagem de posts.
-        
-- **`bridge_post_tag`** (`post_sk` FK, `tag_sk` FK)
-    - `post_sk`, `tag_sk`: Chaves estrangeiras que resolvem a relação N:M entre posts e tags.
-
-
 #### **3. Extração de Dados - extração inicial e atualizações**
 
 A extração visa ser resiliente e eficiente, lidando com as características de cada fonte de dados.
@@ -328,13 +270,13 @@ A extração visa ser resiliente e eficiente, lidando com as características de
 ##### **Incremental & Idempotência (operacional)**
 
 - **Watermark por canal**: Armazenar `max(published_at_ts)` por `yt_user` (da tabela `posts_creator`); nas execuções, consultar `publishedAfter = watermark - overlap(24–48h)` para tolerância a falhas.
-- **Idempotência em Silver**: Consolidar Bronze→Silver com `MERGE` na tabela `silver.posts_creator` usando a chave de negócio que define um post de forma única: a combinação de **`creator_id`** (ID do post na origem), **`title`** e **`published_at_ts`**. Reprocessar janelas históricas não duplicará os dados.
-- **Particionamento**: A camada Bronze é particionada por `ingestion_date`; **Em produção**, a `silver.posts_creator` é **particionada por `published_month`** e otimizada com `OPTIMIZE`/`ZORDER (yt_user, published_month)`.
+- **Idempotência em Silver**: Consolidar Bronze→Silver com `MERGE` na tabela `silver.posts_creator` usando a chave de negócio que define um post de forma única: a combinação de **`creator_id`** (ID do post na origem), **`title`** e **`published_at`**. Reprocessar janelas históricas não duplicará os dados.
+- **Particionamento**: A camada Bronze é particionada por `ingestion_date`; a tabela `silver.posts_creator` é **particionada por `published_month`** e otimizada com `OPTIMIZE`/`ZORDER (yt_user, published_month)`.
 
 
 #### **4. Etapas do Pipeline: o fluxo de dados**
 
-O fluxo de dados é orquestrado como um Grafo Acíclico Dirigido (DAG), garantindo que as tarefas sejam executadas na ordem correta e de forma idempotente.
+O fluxo de dados é orquestrado como um DAG, garantindo que as tarefas sejam executadas na ordem correta e de forma idempotente.
 
 1. **Tarefa 1: Descoberta e Enriquecimento de Criadores (Diário)**: Atualiza a tabela `silver.users_yt` a partir da API da Wikipedia. Em caso de falha, popula a tabela de quarentena `silver.users_yt_errors`.
 2. **Tarefa 2: Ingestão Incremental de Posts e Métricas (execução horária):** Captura novos posts de canais ativos, incluindo metadados, métricas (`views`, `likes`) e tags, e atualiza a tabela denormalizada `silver.posts_creator`.
@@ -362,7 +304,7 @@ O fluxo de dados é orquestrado como um Grafo Acíclico Dirigido (DAG), garantin
     - O job `Enrich Wiki` já deve ter sido executado com sucesso para este criador, gerando um registro em `silver.users_yt`.
         
 - **Passos de Execução**:
-    1. Navegue até o orquestrador (Airflow/Databricks Workflows).
+    1. Navegue até o orquestrador (Airflow).
     2. Localize o workflow/job `[Backfill Vídeos]`.
     3. Execute o job manualmente com os seguintes parâmetros:
         - `user_id`: `"{ID_DO_CRIADOR}"`
@@ -398,7 +340,7 @@ A estratégia de monitoramento é ligada à uma **biblioteca de Runbooks Operaci
 
       - **Frescor**: Em ≥ 99% dos dias, o atraso dos dados na Gold será **inferior a 2 horas** em relação ao fechamento de D-1.
       - **Completude**: ≥ 98% dos criadores de conteúdo ativos (em `silver.posts_creator`) terão um registro correspondente em `silver.users_yt`.
-      - **Unicidade**: 100% de unicidade para a chave de negócio de posts (combinação de `creator_id`, `title`, `published_at_ts`) na tabela `silver.posts_creator`.
+      - **Unicidade**: 100% de unicidade para a chave de negócio de posts (combinação de `creator_id`, `title`, `published_at`) na tabela `silver.posts_creator`.
       - **Sucesso e Confiabilidade**: ≥ 99% das execuções diárias do pipeline serão concluídas sem falhas (excluindo retries automáticos), resultando em uma **taxa de falha mensal inferior a 1%**.
 
   - **CLO (Cost Level Objective - Objetivos de Custo)**:
@@ -411,7 +353,7 @@ A estratégia de monitoramento é ligada à uma **biblioteca de Runbooks Operaci
 	- **Frescor (Gold < 2h D-1)**: medido por `max(load_end_ts)` das tabelas `dim_*`/`fct_*` vs. `cutoff D-1 23:59:59 UTC`.
 	- **Completude (≥ 98%)**: `COUNT(DISTINCT yt_user em posts_creator)` cobertos por `users_yt`.
 	- **CLO (≤ $X/$Y/$Z)**: coletado via **export de billing** + **tags de custo por job**; apuração diária e alerta preditivo (projeção semanal).
-	-
+	
 ##### **Qualidade dos Dados (Governança Ativa)**:
 
 A qualidade é garantida por **Contratos de Dados** automatizados, aplicados através de uma **pirâmide de testes**:
@@ -422,7 +364,7 @@ A qualidade é garantida por **Contratos de Dados** automatizados, aplicados atr
     - `wiki_page` **única** em `silver.users_yt`.
     - `published_at_ts` **NOT NULL** em `silver.posts_creator`.
     - Unicidade da **chave de negócio composta** de `posts_creator`.
-    - Sem duplicidade em `gold.bridge_post_tag`** para o par (`post_sk`, `tag_sk`).
+    - Sem duplicidade em `gold.bridge_post_tag` para o par (`post_sk`, `tag_sk`).
     
 - **Importantes (WARN)**
     - `user_id` duplicado em `users_yt` (**sinaliza consolidação**).
@@ -439,17 +381,15 @@ ALTER TABLE silver.posts_creator
 
 
 
-#### **6. Boas Práticas 
+#### **6. Boas Práticas** 
 
 
 
-Para garantir que a plataforma de dados seja robusta, manutenível e escalável, adotamos um conjunto de boas práticas estruturais. Se trata de um ciclo de vida dos dados integrado que abrange desde o desenvolvimento até a governança e a gestão de custos.
+O **Ciclo de Vida de Desenvolvimento** é projetado para garantir qualidade e velocidade. O branching model para o git segue o fluxo de um **Gitflow enxuto** (`main`, `dev`, `feature/`), com branches main e dev protegidas. Toda alteração é validada por meio de Pull Requests e code review. Cada PR dispara um pipeline de **CI/CD no GitHub Actions** que atua como um portão de qualidade automatizado, executando uma suíte completa de validações: desde *linting* (Ruff), formatação (Black) e checagem de tipos (Mypy), até testes unitários com PySpark, testes de contrato que verificam schemas e testes de dados que garantam a integridade do negócio. Seomente depois da aprovação em todos os estágios que o código é integrado, seguindo os princípios de *Conventional Commits* e *Semantic Versioning* para manter um histórico de mudanças claro e previsível.
 
-O **Ciclo de Vida de Desenvolvimento** é projetado para garantir qualidade e velocidade. O branching model para o git segue o fluxo de um **Gitflow enxuto** (`main`, `develop`, `feature/*`), com branches main e develop protegidas. Também toda alteração é validada por meio de Pull Requests e code review. Cada PR dispara um pipeline de **CI/CD no GitHub Actions** que atua como um portão de qualidade automatizado, executando uma suíte completa de validações: desde *linting* (Ruff), formatação (Black) e checagem de tipos (Mypy), até testes unitários com PySpark, testes de contrato que verificam schemas e testes de dados que garantiam a integridade do negócio. Apenas após a aprovação em todos os estágios, o código é integrado, seguindo os princípios de *Conventional Commits* e *Semantic Versioning* para manter um histórico de mudanças claro e previsível.
+A infraestrutura deve ser tão confiável e versionada quanto o código. Por isso, é praticada a **Infraestrutura como Código (IaC)**. Jobs, clusters, permissões e políticas são definidos em código utilizando **Terraform**. Isso automatiza o deploy, garante a consistência entre ambientes e, além de tudo, permite uma Gestão de Custos otimizada. Os  **CLOs (Cost Level Objectives)** são implementados através de políticas de cluster que forçam o uso de `auto-termination` e autoscaling conservador, além de otimizações contínuas de Spark, como particionamento, `OPTIMIZE` e `Z-ORDER` seletivo, sempre com alertas de orçamento para evitar surpresas.
 
-A infraestrutura deve ser tão confiável e versionada quanto o código. Por isso, é praticada a **Infraestrutura como Código (IaC)** de forma rigorosa. Jobs, clusters, permissões e políticas são definidos em código utilizando **Terraform**. Isso automatiza o deploy, garante a consistência entre ambientes e, além de tudo, permite uma Gestão de Custos otimizada. Os  **CLOs (Cost Level Objectives)** são implementados através de políticas de cluster que forçam o uso de `auto-termination` e autoscaling conservador, além de otimizações contínuas de Spark, como particionamento, `OPTIMIZE` e `Z-ORDER` seletivo, sempre com alertas de orçamento para evitar surpresas.
-
-A **Segurança e a Governança Ativa** são pilares integrados ao fluxo de trabalho, habilitados pelo **Unity Catalog**. A segurança começa no código, com a gestão de segredos via Databricks Secrets/KMS e varreduras automáticas de dependências (Dependabot). No nível dos dados, o Unity Catalog permite a implementação de **RBAC por camada** (escrita restrita em Bronze/Silver, leitura ampla em Gold) e fornece uma **linhagem de dados** completa para auditoria. A governança se torna "viva" e operacionalizável ao documentarmos nossas tabelas no código, como um contrato explícito com os consumidores:
+A **Segurança e a Governança Ativa** são pilares integrados ao fluxo de trabalho, habilitados pelo **Unity Catalog**. A segurança começa no código, com a gestão de segredos via Databricks Secrets/KMS e varreduras automáticas de dependências (Dependabot). No nível dos dados, o Unity Catalog permite a implementação de **RBAC por camada** (escrita restrita em Bronze/Silver, leitura ampla em Gold) e fornece uma **linhagem de dados** completa para auditoria. A governança se torna ativa e operacionalizável conforme a documentação das tabelas é feita no próprio código, como um contrato explícito com os consumidores:
 
 ```sql
 -- Exemplo de documentação e política de governança
@@ -465,7 +405,7 @@ ALTER TABLE silver.posts_creator SET TBLPROPERTIES (
 VACUUM silver.posts_creator RETAIN 240 HOURS; -- Retém 10 dias de histórico
 ```
 
-Ao combinar essas práticas, é criado um ciclo onde código de alta qualidade gera uma infraestrutura confiável, que por sua vez executa pipelines seguros, governados e com custo otimizado, entregando valor de forma consistente e escalável.
+Ao unir essas práticas, forma-se um ciclo no qual um código de qualidade garante uma infraestrutura confiável, que executa pipelines seguros, bem governados e com custos otimizados, entregando valor de maneira consistente e escalável.
 
 
 
@@ -495,3 +435,63 @@ Estrutura do repositório:
 │ └── slis_slos_slas_clos.md  
 └── README.md
 ```
+
+
+
+
+#### Apêndice - Dicionários de dados
+
+###### **Camada Silver**
+
+  - **`silver.users_yt`**
+    - `user_id` (PK, natural): Identificador do canal/usuário no YouTube, chave para joins.
+    - `wiki_page` (UK): Nome da página na Wikipedia de onde o `user_id` foi extraído.
+
+- **`silver.posts_creator`**
+    - `creator_id`: ID original do post vindo do arquivo fonte.
+    - `yt_user` (FK → users_yt): Identificador do canal associado ao post.
+    - `title`: Título do vídeo.
+    - `views`, `likes`: Métricas de engajamento do post.
+    - `tags`: Lista (Array) de tags associadas ao vídeo.
+    - `published_at_ts`: Timestamp normalizado da data de publicação.
+    - `published_month`: Data truncada para o primeiro dia do mês da publicação, usada para agregações.
+
+
+- **`silver.users_yt_errors`**
+  - `wiki_page`: Nome da página na Wikipedia que foi processada sem sucesso.
+  - `error`: Motivo da falha (ex: 'user_id_not_found', 'empty_page').
+
+
+###### **Camada Gold**
+
+- **`dim_creator`** (`creator_sk` PK, `user_id` NK, `wiki_page`)
+    - `creator_sk`: Chave substituta única para cada criador.
+    - `user_id`: Chave de negócio (natural key) vinda da `silver.users_yt`.
+    - `wiki_page`: Página da Wikipedia associada.
+    
+- **`dim_post`** (`post_sk` PK, `source_post_id` NK, `title`)
+    - `post_sk`: Chave substituta única para cada post.
+    - `source_post_id`: Chave de negócio (`creator_id` do arquivo original).
+    - `title`: Título do post.
+
+- **`dim_date`** (`date_sk` PK, `full_date`, `year`, `month`, `year_month_name`, `dow`, `is_weekend`, `iso_year`, `iso_week`, `tz`)
+  - `date_sk`: **inteiro derivado de UTC no formato `YYYYMMDD`** (ex.: 20240415).
+  - `full_date`: **DATE (UTC)** correspondente ao `date_sk`.
+  - `year`, `month`: Componentes numéricos da data.
+  - `year_month_name`: Formato para exibição (ex.: `2024-Abril`).
+  - `dow`: Dia da semana **1–7 (ISO 8601, 1=segunda, 7=domingo)**.
+  - `is_weekend`: Indicador de fim de semana (**TRUE** se `dow` ∈ {6,7}).
+  - `iso_year`, `iso_week`: Ano/Semana ISO (atenção a semanas que “viram” de ano).
+  - `tz`: Fuso de referência (**sempre `UTC` na base**; fusos locais podem ser tratados em views).
+
+- **`dim_tag`** (`tag_sk` PK, `tag_name`)
+    - `tag_sk`: Chave substituta única para cada tag.
+    - `tag_name`: O texto da tag.
+
+- **`fct_post_publications`** (`creator_sk` FK, `post_sk` FK, `published_date_sk` FK, `views`, `likes`, `post_count`)
+    - `creator_sk`, `post_sk`, `published_date_sk`: Chaves estrangeiras que conectam às dimensões.
+    - `views`, `likes`: Métricas de engajamento do post.
+    - `post_count`: Medida aditiva (sempre 1) para facilitar a contagem de posts.
+
+- **`bridge_post_tag`** (`post_sk` FK, `tag_sk` FK)
+    - `post_sk`, `tag_sk`: Chaves estrangeiras que resolvem a relação N:M entre posts e tags.
